@@ -1,6 +1,6 @@
 {-# LANGUAGE OverlappingInstances, FunctionalDependencies, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleInstances, UndecidableInstances,
-    FlexibleContexts, DeriveFunctor #-}
+    FlexibleContexts, DeriveFunctor, Rank2Types #-}
 {-# OPTIONS_HADDOCK hide #-}
 
 module Happstack.StaticRouting.Internal where
@@ -36,17 +36,21 @@ newtype Segment =
 type EndSegment = (Maybe Int, H.Method)
 
 -- | Support for varying number of arguments to 'path' handlers.
-class Path m hm a b | a b -> m hm where
-  pathHandler :: (m b -> hm c) -> a -> hm c
-  arity :: m b -> a -> Int
+class Path m hm h r | h -> m r where
+  pathHandler :: forall r'. (m r -> hm r') -> h -> hm r'
+  arity       :: (forall a. hm a) -> h -> Int
 
-instance (FromReqURI d, ServerMonad hm, MonadPlus hm, Path m hm a b)
-         => Path m hm (d -> a) b where
-  pathHandler w f = H.path (pathHandler w . f)
-  arity m f = 1 + arity m (f undefined)
+instance (
+    FromReqURI v
+  , ServerMonad hm
+  , MonadPlus hm
+  , Path m hm h r
+  ) => Path m hm (v -> h) r where
+    pathHandler trans f = H.path (pathHandler trans . f)
+    arity m f = 1 + arity m (f undefined)
 
-instance Path m hm (m b) b where
-  pathHandler w m = w m
+instance Path m hm (m r) r where
+  pathHandler trans mr = trans mr
   arity _ _ = 0
 
 -- | Pop a path element if it matches the given string.
@@ -58,8 +62,9 @@ choice :: [Route a] -> Route a
 choice = Choice
 
 -- | Expect the given method, and exactly 'n' more segments, where 'n' is the arity of the handler.
-path :: forall m hm h a b. Path m hm h a => H.Method -> (m a -> hm b) -> h -> Route (hm b)
-path m w h = Handler (Just (arity (undefined::m a) h),m) (pathHandler w h)
+path :: forall m hm h r r'. Path m hm h r
+     => H.Method -> (m r -> hm r') -> h -> Route (hm r')
+path m trans h = Handler (Just (arity (undefined::hm a) h), m) (pathHandler trans h)
 
 -- | Expect zero or more segments.
 remainingPath :: H.Method -> h -> Route h
