@@ -1,6 +1,6 @@
 {-# LANGUAGE OverlappingInstances, FunctionalDependencies, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleInstances, UndecidableInstances,
-    FlexibleContexts, DeriveFunctor, Rank2Types #-}
+    FlexibleContexts, DeriveFunctor #-}
 {-# OPTIONS_HADDOCK hide #-}
 
 module Happstack.StaticRouting.Internal where
@@ -36,9 +36,9 @@ newtype Segment =
 type EndSegment = (Maybe Int, H.Method)
 
 -- | Support for varying number of arguments to 'path' handlers.
-class Path m hm h r | h -> m r where
+class Path m hm h r | h r -> m where
   pathHandler :: forall r'. (m r -> hm r') -> h -> hm r'
-  arity       :: (forall a. hm a) -> h -> Int
+  arity       :: hm r -> h -> Int
 
 instance (
     FromReqURI v
@@ -64,7 +64,7 @@ choice = Choice
 -- | Expect the given method, and exactly 'n' more segments, where 'n' is the arity of the handler.
 path :: forall m hm h r r'. Path m hm h r
      => H.Method -> (m r -> hm r') -> h -> Route (hm r')
-path m trans h = Handler (Just (arity (undefined::hm a) h), m) (pathHandler trans h)
+path m trans h = Handler (Just (arity (undefined::hm r) h), m) (pathHandler trans h)
 
 -- | Expect zero or more segments.
 remainingPath :: H.Method -> h -> Route h
