@@ -25,8 +25,6 @@ module Happstack.StaticRouting
   , path
   , Path
   , remainingPath
-  , param
-  , handler
   ) where
 
 import Happstack.StaticRouting.Internal
