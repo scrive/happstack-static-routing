@@ -8,7 +8,7 @@
 -- first.
 --
 -- Routing tables are constructed from 'dir', 'path', 'remainingPath',
--- 'choice', and (for now) 'param'.
+-- 'choice', and 'param'.
 --
 -- A routing table is compiled by using 'compile'.  The result is an
 -- overlap report, and a prefix tree that is used to efficiently
@@ -22,6 +22,7 @@ module Happstack.StaticRouting
   , compile
   , choice
   , dir
+  , param
   , path
   , Path
   , remainingPath

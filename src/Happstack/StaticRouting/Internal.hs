@@ -15,18 +15,19 @@ import Control.Arrow(first, second)
 import qualified Data.ListTrie.Map as Trie
 import Data.Map(Map)
 import qualified Data.Map as Map
-import Data.List(intercalate)
+import Data.List(intercalate,find)
 import Data.Maybe
 
 -- | Static routing tables consisting of handlers of type 'a'.
 data Route a =
     Dir Segment (Route a)
+  | Param (Route a)
   | Handler EndSegment a
   | Choice [Route a]
   deriving (Show, Functor)
 
-newtype Segment =
-    StringS String
+data Segment =
+    StringS String | ParamS
   deriving (Show, Eq, Ord)
 
 type EndSegment = (Maybe Int, Method)
@@ -62,6 +63,10 @@ instance Path m hm (m r) r where
 dir :: String -> Route a -> Route a
 dir = Dir . StringS
 
+-- | Pop a path element, and store it to use with handler
+param :: Route a -> Route a
+param = Param
+
 -- | Combine several route alternatives into one.
 choice :: [Route a] -> Route a
 choice = Choice
@@ -95,22 +100,30 @@ routeTreeWithOverlaps r =
 -- | Check for overlaps in a 'RouteTree', returning either an error
 -- message in case of an overlap, or a 'RouteTree' without overlaps.
 routeTree :: RouteTree (Maybe a) -> Either String (RouteTree a)
-routeTree t | null os   = Right $ fmap fromJust t
-            | otherwise =
+routeTree t | not $ null os =
                 Left $ unlines $
                   "Happstack.StaticRouting: Overlapping handlers in" :
                   map (("  "++) . showSegments) os
+            | not $ null is =
+                Left $ unlines $
+                  "Happstack.StaticRouting: Unreachable handler due to ignored parameter in" :
+                  map (("  "++) . showSegments) is
+            | otherwise = Right $ fmap fromJust t
 
   where os = [ (ss, es) | (ss, m) <- Trie.toList (unR t)
              , (es, Nothing) <- Map.toList m
              ]
-
+        is = [ (ss, es) | (ss, m) <- Trie.toList (unR t)
+             , (es@(Just p, _), _) <- Map.toList m
+             , p < length (filter ((==) ParamS) $ ss)
+             ]
 showSegments :: Segments -> String
 showSegments (ss, es) = concatMap showSegment ss ++ showEndSegment es
   where
 
   showSegment :: Segment -> String
   showSegment (StringS e) = "dir " ++ show e ++ " $ "
+  showSegment (ParamS) = "param (used in handler) $ "
 
   showEndSegment :: EndSegment -> String
   showEndSegment (Just a, m) = "<handler> -- with method " ++ show m ++ " and arity " ++ show a
@@ -119,6 +132,7 @@ showSegments (ss, es) = concatMap showSegment ss ++ showEndSegment es
 flatten :: Route a -> [(Segments, a)]
 flatten = f where
   f (Dir s r) = map (first (first (s:))) (f r)
+  f (Param r) = map (first (first (ParamS:))) (f r)
   f (Handler e a) = [(([], e), a)]
   f (Choice rs) = concatMap f rs
 
@@ -139,22 +153,24 @@ dispatch :: forall m . (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Respo
             RouteTree (m Response) -> m (Maybe Response)
 dispatch t = do
   rq  <- askRq
-  case dispatch' (rqMethod rq) (rqPaths rq) t of
+  case dispatch' [] (rqMethod rq) (rqPaths rq) t of
     Just (rq', h) -> Just `liftM` localRq (\newRq -> newRq{ rqPaths = rq'}) h
     Nothing       -> return Nothing
 
 -- | Dispatch a request given a method and path.  Give priority to more specific paths.
-dispatch' :: forall a . Method -> [String] -> RouteTree a -> Maybe ([String], a)
-dispatch' m ps (R t) = dChildren ps `mplus` fmap (ps,) dNode
+-- 'params' holds path segments that where matched 'ParamS' segment.
+dispatch' :: forall a . [String] -> Method -> [String] -> RouteTree a -> Maybe ([String], a)
+dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
   where
   -- most specific: look up a segment in the children and recurse
   dChildren :: [String] -> Maybe ([String], a)
-  dChildren (p:ps') = Map.lookup (StringS p) (Trie.children1 t) >>= dispatch' m ps' . R
+  dChildren (p:ps') = ((Map.lookup (StringS p) (Trie.children1 t)) >>= dispatch' params m ps' . R)
+              `mplus` ((Map.lookup (ParamS) (Trie.children1 t)) >>= dispatch' (params ++ [p]) m ps' . R)
   dChildren []      = Nothing
   dNode :: Maybe a
   dNode = Trie.lookup [] t >>= \em ->
    -- or else a 'path' taking a given specific number of remaining segments
-           Map.lookup (Just (length ps), m) em
+           Map.lookup (Just (length ps + length params), m) em
   -- least specific: a 'remainingPath' taking any number of remaining segments
      `mplus` Map.lookup (Nothing, m) em
 
