@@ -22,7 +22,7 @@ import Data.Maybe
 data Route a =
     Dir Segment (Route a)
   | Param (Route a)
-  | Handler EndSegment a
+  | Handler EndSegment CheckApply a
   | Choice [Route a]
   deriving (Show, Functor)
 
@@ -32,10 +32,13 @@ data Segment =
 
 type EndSegment = (Maybe Int, Method)
 
+type CheckApply = [String] -> Bool
+
 -- | Support for varying number of arguments to 'path' handlers.
 class Path m hm h r | h r -> m where
   pathHandler :: forall r'. (m r -> hm r') -> h -> hm r'
   arity       :: hm r -> h -> Int
+  canBeApplied :: hm r -> h -> [String] -> Bool
 
 instance (
     FromReqURI v
@@ -44,6 +47,11 @@ instance (
   ) => Path m hm (v -> h) r where
     pathHandler trans f = applyPath (pathHandler trans . f)
     arity m f = 1 + arity m (f undefined)
+    canBeApplied m f [] = False
+    canBeApplied m f (s:ss) = case (fromReqURI s) of
+                                Just p -> canBeApplied m (f p) ss
+                                Nothing -> False
+
 
 -- | Pop a path element and parse it using the 'fromReqURI' in the
 -- 'FromReqURI' class.  Variant of Happstack.Server.path without 'mzero'
@@ -55,9 +63,11 @@ applyPath handle = do
                             -> localRq (\newRq -> newRq{rqPaths = xs}) (handle a)
         _ -> error "Happstack.StaticRouting.applyPath"
 
+
 instance Path m hm (m r) r where
   pathHandler trans mr = trans mr
   arity _ _ = 0
+  canBeApplied _ _ _ = True
 
 -- | Pop a path element if it matches the given string.
 dir :: String -> Route a -> Route a
@@ -74,11 +84,11 @@ choice = Choice
 -- | Expect the given method, and exactly 'n' more segments, where 'n' is the arity of the handler.
 path :: forall m hm h r r'. Path m hm h r
      => Method -> (m r -> hm r') -> h -> Route (hm r')
-path m trans h = Handler (Just (arity (undefined::hm r) h), m) (pathHandler trans h)
+path m trans h = Handler (Just (arity (undefined::hm r) h), m) (canBeApplied (undefined::hm r) h) (pathHandler trans h)
 
 -- | Expect zero or more segments.
 remainingPath :: Method -> h -> Route h
-remainingPath m = Handler (Nothing,m)
+remainingPath m = Handler (Nothing,m) (\_ -> True)
 
 newtype RouteTree a =
   R { unR :: Trie.TrieMap Map Segment (Map EndSegment a) } deriving (Show, Functor)
@@ -86,7 +96,7 @@ newtype RouteTree a =
 type Segments = ([Segment],EndSegment)
 
 -- | Compile a route into a 'RouteTree'.  Turn overlapping routes into 'Nothing'
-routeTreeWithOverlaps :: Route a -> RouteTree (Maybe a)
+routeTreeWithOverlaps :: Route a -> RouteTree (Maybe (CheckApply,a))
 routeTreeWithOverlaps r =
   R $ foldr (\((ps,es),m) ->
               Trie.insertWith (Map.unionWith merge)
@@ -99,7 +109,7 @@ routeTreeWithOverlaps r =
 
 -- | Check for overlaps in a 'RouteTree', returning either an error
 -- message in case of an overlap, or a 'RouteTree' without overlaps.
-routeTree :: RouteTree (Maybe a) -> Either String (RouteTree a)
+routeTree :: RouteTree (Maybe (CheckApply,a)) -> Either String (RouteTree (CheckApply,a))
 routeTree t | not $ null os =
                 Left $ unlines $
                   "Happstack.StaticRouting: Overlapping handlers in" :
@@ -129,11 +139,11 @@ showSegments (ss, es) = concatMap showSegment ss ++ showEndSegment es
   showEndSegment (Just a, m) = "<handler> -- with method " ++ show m ++ " and arity " ++ show a
   showEndSegment (Nothing, m) = "remainingPath $ <handler> -- with method " ++ show m
 
-flatten :: Route a -> [(Segments, a)]
+flatten :: Route a -> [(Segments, (CheckApply, a))]
 flatten = f where
   f (Dir s r) = map (first (first (s:))) (f r)
   f (Param r) = map (first (first (ParamS:))) (f r)
-  f (Handler e a) = [(([], e), a)]
+  f (Handler e ca a) = [(([], e), (ca, a))]
   f (Choice rs) = concatMap f rs
 
 -- | Compile routes or return overlap report.  Returns 'Left e' in
@@ -150,7 +160,7 @@ compile r = case t of
 
 -- | Dispatch a request given a route.  Give priority to more specific paths.
 dispatch :: forall m . (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Response m) =>
-            RouteTree (m Response) -> m (Maybe Response)
+            RouteTree (CheckApply,(m Response)) -> m (Maybe Response)
 dispatch t = do
   rq  <- askRq
   case dispatch' [] (rqMethod rq) (rqPaths rq) t of
@@ -159,7 +169,7 @@ dispatch t = do
 
 -- | Dispatch a request given a method and path.  Give priority to more specific paths.
 -- 'params' holds path segments that where matched 'ParamS' segment.
-dispatch' :: forall a . [String] -> Method -> [String] -> RouteTree a -> Maybe ([String], a)
+dispatch' :: forall a . [String] -> Method -> [String] -> RouteTree (CheckApply,a) -> Maybe ([String], a)
 dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
   where
   -- most specific: look up a segment in the children and recurse
@@ -168,9 +178,13 @@ dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
               `mplus` ((Map.lookup (ParamS) (Trie.children1 t)) >>= dispatch' (params ++ [p]) m ps' . R)
   dChildren []      = Nothing
   dNode :: Maybe a
-  dNode = Trie.lookup [] t >>= \em ->
-   -- or else a 'path' taking a given specific number of remaining segments
-           Map.lookup (Just (length ps + length params), m) em
-  -- least specific: a 'remainingPath' taking any number of remaining segments
-     `mplus` Map.lookup (Nothing, m) em
+  dNode = do
+    -- Find a handler that does not need any more segments
+    em <- Trie.lookup [] t
+    -- Select one that matches number of parameters or one that will ignore them (created with 'remainingPath')
+    (ac,h)  <- (Map.lookup (Just (length ps + length params), m) em) `mplus` (Map.lookup (Nothing, m) em)
+    -- Make sure that params can converted with fromReqURI
+    if (ac (params ++ ps))
+     then return h
+     else Nothing
 
