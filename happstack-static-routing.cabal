@@ -1,5 +1,5 @@
 Name:                happstack-static-routing
-Version:             0.4.2
+Version:             0.5
 Synopsis: Support for static URL routing with overlap detection for Happstack.
 
 Description: If you have a large routing table in Happstack and want

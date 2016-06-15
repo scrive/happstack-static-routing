@@ -24,7 +24,7 @@ data Route a =
   | Param (Route a)
   | Handler EndSegment CheckApply a
   | Choice [Route a]
-  deriving (Show, Functor)
+  deriving Functor
 
 data Segment =
     StringS String | ParamS
