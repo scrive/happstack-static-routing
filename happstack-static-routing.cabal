@@ -14,8 +14,8 @@ Description: If you have a large routing table in Happstack and want
 
 License:             BSD3
 License-file:        LICENSE
-Author:              Scrive
-Maintainer:          gracjan@scrive.com
+Author:              Scrive AB
+Maintainer:          Gracjan Polak <gracjanpolak@gmail.com>
 Homepage:            https://github.com/scrive/happstack-static-routing
 Stability:           Development
 Category:            Web, Distributed Computing
