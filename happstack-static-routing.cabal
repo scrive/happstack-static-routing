@@ -21,8 +21,13 @@ Stability:           Development
 Category:            Web, Distributed Computing
 Build-type:          Simple
 Cabal-version:       >=1.6
-Tested-with:         GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.3, GHC == 8.0.1
+Tested-with:         GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4,
+                     GHC == 7.10.3, GHC == 8.0.1
 Extra-source-files:  README.md
+
+source-repository head
+  type: git
+  location: git://github.com/scrive/happstack-static-routing.git
 
 library
   exposed-modules:
@@ -38,7 +43,3 @@ library
   build-depends: containers >= 0.3
   build-depends: list-tries >= 0.4
   build-depends: transformers >= 0.2
-
-source-repository head
-  type: git
-  location: git://github.com/scrive/happstack-static-routing.git
