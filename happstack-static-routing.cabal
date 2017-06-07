@@ -1,5 +1,5 @@
 Name:                happstack-static-routing
-Version:             0.5
+Version:             0.6
 Synopsis: Support for static URL routing with overlap detection for Happstack.
 
 Description: If you have a large routing table in Happstack and want
@@ -15,7 +15,9 @@ Description: If you have a large routing table in Happstack and want
 License:             BSD3
 License-file:        LICENSE
 Author:              Scrive AB
-Maintainer:          Gracjan Polak <gracjanpolak@gmail.com>
+Maintainer:          Gracjan Polak <gracjanpolak@gmail.com>,
+                     Jonathan Jouty <jonathan@scrive.com>,
+                     Mikhail Glushenkov <mikhail@scrive.com>
 Homepage:            https://github.com/scrive/happstack-static-routing
 Stability:           Development
 Category:            Web, Distributed Computing

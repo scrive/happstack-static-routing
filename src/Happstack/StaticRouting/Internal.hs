@@ -1,4 +1,4 @@
-{-# LANGUAGE OverlappingInstances, FunctionalDependencies, ScopedTypeVariables,
+{-# LANGUAGE FunctionalDependencies, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleInstances, UndecidableInstances,
     FlexibleContexts, DeriveFunctor, PatternGuards, TupleSections #-}
 {-# OPTIONS_HADDOCK hide #-}
