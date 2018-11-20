@@ -1,2 +1,2 @@
 packages: .
-allow-newer: list-tries:base, happstack-server:template-haskell
+allow-newer: happstack-server:template-haskell
