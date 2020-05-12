@@ -1,6 +1,6 @@
 {-# LANGUAGE FunctionalDependencies, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleInstances, UndecidableInstances,
-    FlexibleContexts, DeriveFunctor, PatternGuards, TupleSections #-}
+    FlexibleContexts, DeriveFunctor, PatternGuards, TupleSections, AllowAmbiguousTypes, TypeApplications #-}
 {-# OPTIONS_HADDOCK hide #-}
 
 module Happstack.StaticRouting.Internal where
@@ -35,10 +35,10 @@ type EndSegment = (Maybe Int, Method)
 type CheckApply = [String] -> Bool
 
 -- | Support for varying number of arguments to 'path' handlers.
-class Path m hm h r | h r -> m where
-  pathHandler :: forall r'. (m r -> hm r') -> h -> hm r'
-  arity       :: hm r -> h -> Int
-  canBeApplied :: hm r -> h -> [String] -> Bool
+class Path m hm h r | h -> m r where
+  pathHandler  :: forall r'. (m r -> hm r') -> h -> hm r'
+  arity        :: h -> Int
+  canBeApplied :: h -> [String] -> Bool
 
 instance (
     FromReqURI v
@@ -46,10 +46,10 @@ instance (
   , Path m hm h r
   ) => Path m hm (v -> h) r where
     pathHandler trans f = applyPath (pathHandler trans . f)
-    arity m f = 1 + arity m (f undefined)
-    canBeApplied m f [] = False
-    canBeApplied m f (s:ss) = case (fromReqURI s) of
-                                Just p -> canBeApplied m (f p) ss
+    arity f = 1 + arity @m @hm (f undefined)
+    canBeApplied f [] = False
+    canBeApplied f (s:ss) = case (fromReqURI s) of
+                                Just p -> canBeApplied @m @hm (f p) ss
                                 Nothing -> False
 
 
@@ -66,8 +66,8 @@ applyPath handle = do
 
 instance Path m hm (m r) r where
   pathHandler trans mr = trans mr
-  arity _ _ = 0
-  canBeApplied _ _ _ = True
+  arity _ = 0
+  canBeApplied _ _ = True
 
 -- | Pop a path element if it matches the given string.
 dir :: String -> Route a -> Route a
@@ -84,7 +84,7 @@ choice = Choice
 -- | Expect the given method, and exactly 'n' more segments, where 'n' is the arity of the handler.
 path :: forall m hm h r r'. Path m hm h r
      => Method -> (m r -> hm r') -> h -> Route (hm r')
-path m trans h = Handler (Just (arity (undefined::hm r) h), m) (canBeApplied (undefined::hm r) h) (pathHandler trans h)
+path m trans h = Handler (Just (arity @m @hm h), m) (canBeApplied @m @hm h) (pathHandler trans h)
 
 -- | Expect zero or more segments.
 remainingPath :: Method -> h -> Route h
