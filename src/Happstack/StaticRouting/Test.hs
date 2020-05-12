@@ -1,12 +1,13 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Happstack.StaticRouting.Test where
 
+import Happstack.Server
+  ( FilterMonad, Response, ServerPartT, nullConf, simpleHTTP
+  )
 import qualified Data.ListTrie.Map as Trie
-
-import Happstack.Server(ServerPartT, nullConf, simpleHTTP, FilterMonad, Response)
-
 import qualified Happstack.Server as H
 
 import Happstack.StaticRouting.Internal
