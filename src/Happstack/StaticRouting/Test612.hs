@@ -1,15 +1,14 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Happstack.StaticRouting.Test612 where
 
 -- Backport of Happstack.StaticRouting.Test to GHC 6.12.3
 
+import Happstack.Server (FromReqURI)
+import Happstack.Server (ServerPartT, nullConf, simpleHTTP)
 import qualified Data.ListTrie.Map as Trie
-
-import Happstack.Server(ServerPartT, nullConf, simpleHTTP)
-import Happstack.Server(FromReqURI)
-
 import qualified Happstack.Server as H
 
 import Happstack.StaticRouting.Internal hiding (path)

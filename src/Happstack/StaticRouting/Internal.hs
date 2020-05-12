@@ -1,22 +1,26 @@
-{-# LANGUAGE FunctionalDependencies, ScopedTypeVariables,
-    MultiParamTypeClasses, FlexibleInstances, UndecidableInstances,
-    FlexibleContexts, DeriveFunctor, PatternGuards, TupleSections, AllowAmbiguousTypes, TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
-
 module Happstack.StaticRouting.Internal where
 
-import Debug.Trace
-
-import Happstack.Server(askRq, rqPaths, rqMethod, localRq, ServerMonad, Method,
-  HasRqData, methodM, look, FromReqURI, fromReqURI, notFound, Response, toResponse, FilterMonad)
-import Control.Monad(msum, MonadPlus, mzero, mplus, liftM)
-import Control.Monad.IO.Class(MonadIO)
-import Control.Arrow(first, second)
-import qualified Data.ListTrie.Map as Trie
-import Data.Map(Map)
-import qualified Data.Map as Map
-import Data.List(intercalate,find)
+import Control.Arrow (first)
+import Control.Monad (liftM, mplus)
+import Control.Monad.IO.Class (MonadIO)
+import Data.Map (Map)
 import Data.Maybe
+import Happstack.Server
+  ( FilterMonad, FromReqURI, HasRqData, Method, Response, ServerMonad, askRq
+  , fromReqURI, localRq, rqMethod, rqPaths
+  )
+import qualified Data.ListTrie.Map as Trie
+import qualified Data.Map as Map
 
 -- | Static routing tables consisting of handlers of type 'a'.
 data Route a =
@@ -40,14 +44,14 @@ class Path m hm h r | h -> m r where
   arity        :: h -> Int
   canBeApplied :: h -> [String] -> Bool
 
-instance (
-    FromReqURI v
+instance
+  ( FromReqURI v
   , ServerMonad hm
   , Path m hm h r
   ) => Path m hm (v -> h) r where
     pathHandler trans f = applyPath (pathHandler trans . f)
     arity f = 1 + arity @m @hm (f undefined)
-    canBeApplied f [] = False
+    canBeApplied _ [] = False
     canBeApplied f (s:ss) = case (fromReqURI s) of
                                 Just p -> canBeApplied @m @hm (f p) ss
                                 Nothing -> False
@@ -153,10 +157,9 @@ flatten = f where
 -- found, otherwise 'Just response'.
 compile :: (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Response m) =>
            Route (m Response) -> Either String (m (Maybe Response))
-compile r = case t of
+compile r = case routeTree $ routeTreeWithOverlaps r of
               Left s -> Left s
               Right t -> Right $ dispatch t
-  where t = routeTree $ routeTreeWithOverlaps r
 
 -- | Dispatch a request given a route.  Give priority to more specific paths.
 dispatch :: forall m . (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Response m) =>
