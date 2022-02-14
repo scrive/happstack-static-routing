@@ -42,5 +42,4 @@ library
                , transformers     >= 0.2  && < 0.6
 
   exposed-modules: Happstack.StaticRouting
-
-  other-modules:   Happstack.StaticRouting.Internal
+                   Happstack.StaticRouting.Internal

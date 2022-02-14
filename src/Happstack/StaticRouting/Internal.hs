@@ -12,26 +12,23 @@ module Happstack.StaticRouting.Internal where
 
 import Control.Arrow (first)
 import Control.Monad (liftM, mplus)
-import Control.Monad.IO.Class (MonadIO)
 import Data.Map (Map)
 import Data.Maybe
 import Happstack.Server
-  ( FilterMonad, FromReqURI, HasRqData, Method, Response, ServerMonad, askRq
-  , fromReqURI, localRq, rqMethod, rqPaths
+  ( FromReqURI, Method, ServerMonad, askRq, fromReqURI, localRq, rqMethod, rqPaths
   )
 import qualified Data.ListTrie.Map as Trie
 import qualified Data.Map as Map
 
 -- | Static routing tables consisting of handlers of type 'a'.
-data Route a =
-    Dir Segment (Route a)
+data Route a
+  = Dir Segment (Route a)
   | Param (Route a)
   | Handler EndSegment CheckApply a
   | Choice [Route a]
   deriving Functor
 
-data Segment =
-    StringS String | ParamS
+data Segment = StringS String | ParamS
   deriving (Show, Eq, Ord)
 
 type EndSegment = (Maybe Int, Method)
@@ -97,7 +94,7 @@ remainingPath m = Handler (Nothing,m) (\_ -> True)
 newtype RouteTree a =
   R { unR :: Trie.TrieMap Map Segment (Map EndSegment a) } deriving (Show, Functor)
 
-type Segments = ([Segment],EndSegment)
+type Segments = ([Segment], EndSegment)
 
 -- | Compile a route into a 'RouteTree'.  Turn overlapping routes into 'Nothing'
 routeTreeWithOverlaps :: Route a -> RouteTree (Maybe (CheckApply,a))
@@ -113,7 +110,7 @@ routeTreeWithOverlaps r =
 
 -- | Check for overlaps in a 'RouteTree', returning either an error
 -- message in case of an overlap, or a 'RouteTree' without overlaps.
-routeTree :: RouteTree (Maybe (CheckApply,a)) -> Either String (RouteTree (CheckApply,a))
+routeTree :: RouteTree (Maybe (CheckApply, a)) -> Either String (RouteTree (CheckApply, a))
 routeTree t | not $ null os =
                 Left $ unlines $
                   "Happstack.StaticRouting: Overlapping handlers in" :
@@ -155,15 +152,13 @@ flatten = f where
 -- describes the overlap.  Returns 'Right h', where h is a compiled
 -- handler that returns 'Nothing' in case no matching handler was
 -- found, otherwise 'Just response'.
-compile :: (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Response m) =>
-           Route (m Response) -> Either String (m (Maybe Response))
+compile :: ServerMonad m => Route (m r) -> Either String (m (Maybe r))
 compile r = case routeTree $ routeTreeWithOverlaps r of
               Left s -> Left s
               Right t -> Right $ dispatch t
 
 -- | Dispatch a request given a route.  Give priority to more specific paths.
-dispatch :: forall m . (MonadIO m, HasRqData m, ServerMonad m, FilterMonad Response m) =>
-            RouteTree (CheckApply,(m Response)) -> m (Maybe Response)
+dispatch :: ServerMonad m => RouteTree (CheckApply, m r) -> m (Maybe r)
 dispatch t = do
   rq  <- askRq
   case dispatch' [] (rqMethod rq) (rqPaths rq) t of
@@ -172,7 +167,7 @@ dispatch t = do
 
 -- | Dispatch a request given a method and path.  Give priority to more specific paths.
 -- 'params' holds path segments that where matched 'ParamS' segment.
-dispatch' :: forall a . [String] -> Method -> [String] -> RouteTree (CheckApply,a) -> Maybe ([String], a)
+dispatch' :: forall a. [String] -> Method -> [String] -> RouteTree (CheckApply, a) -> Maybe ([String], a)
 dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
   where
   -- most specific: look up a segment in the children and recurse
@@ -190,4 +185,3 @@ dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
     if (ac (params ++ ps))
      then return h
      else Nothing
-
