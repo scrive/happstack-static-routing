@@ -1,3 +1,6 @@
+# happstack-static-routing-0.7.0.1  (2024-??-??)
+* Drop support for GHC < 8.10.
+
 # happstack-static-routing-0.7.0.0  (2022-02-15)
 * Improve functional dependencies of 'Path'.
 * Generalize the type signature of 'compile'.

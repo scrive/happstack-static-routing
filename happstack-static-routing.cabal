@@ -1,5 +1,6 @@
+Cabal-version:       3.0
 Name:                happstack-static-routing
-Version:             0.7.0.0
+Version:             0.7.0.1
 Synopsis: Support for static URL routing with overlap detection for Happstack.
 
 Description: If you have a large routing table in Happstack and want
@@ -12,18 +13,15 @@ Description: If you have a large routing table in Happstack and want
   and build unambiguous routing tables where the order of the handlers
   is irrelevant.
 
-License:             BSD3
+License:             BSD-3-Clause
 License-file:        LICENSE
 Author:              Scrive AB
-Maintainer:          Gracjan Polak <gracjanpolak@gmail.com>,
-                     Jonathan Jouty <jonathan@scrive.com>,
-                     Mikhail Glushenkov <mikhail@scrive.com>
+Maintainer:          Andrzej Rybczak <andrzej@rybczak.net>,
 Homepage:            https://github.com/scrive/happstack-static-routing
 Stability:           Development
 Category:            Web, Distributed Computing
 Build-type:          Simple
-Cabal-version:       >=1.10
-Tested-with:         GHC ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.1
+Tested-with:         GHC == { 8.10.7, 9.0.2, 9.2.8, 9.4.8, 9.6.6, 9.8.2, 9.10.1 }
 Extra-source-files:  README.md, CHANGELOG.md
 
 source-repository head
@@ -35,11 +33,10 @@ library
   hs-source-dirs:   src
   ghc-options:      -Wall
 
-  build-depends: base             >= 4.12 && < 5
-               , containers       >= 0.3  && < 0.7
-               , happstack-server >= 6    && < 8
-               , list-tries       >= 0.4  && < 0.7
-               , transformers     >= 0.2  && < 0.6
+  build-depends: base             >= 4.14 && < 5
+               , containers       >= 0.6
+               , happstack-server >= 7
+               , list-tries       >= 0.6
 
   exposed-modules: Happstack.StaticRouting
                    Happstack.StaticRouting.Internal
