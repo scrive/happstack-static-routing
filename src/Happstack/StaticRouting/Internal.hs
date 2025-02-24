@@ -25,10 +25,11 @@ data Route a
   = Dir Segment (Route a)
   | Param (Route a)
   | Handler EndSegment CheckApply a
+  | RemainingPath Method a
   | Choice [Route a]
   deriving Functor
 
-data Segment = StringS String | ParamS
+data Segment = StringS String | ParamS | RemainingPathS
   deriving (Show, Eq, Ord)
 
 type EndSegment = (Maybe Int, Method)
@@ -89,7 +90,7 @@ path m trans h = Handler (Just (arity @m @hm h), m) (canBeApplied @m @hm h) (pat
 
 -- | Expect zero or more segments.
 remainingPath :: Method -> h -> Route h
-remainingPath m = Handler (Nothing,m) (\_ -> True)
+remainingPath = RemainingPath
 
 newtype RouteTree a =
   R { unR :: Trie.TrieMap Map Segment (Map EndSegment a) } deriving (Show, Functor)
@@ -134,7 +135,8 @@ showSegments (ss, es) = concatMap showSegment ss ++ showEndSegment es
 
   showSegment :: Segment -> String
   showSegment (StringS e) = "dir " ++ show e ++ " $ "
-  showSegment (ParamS) = "param (used in handler) $ "
+  showSegment ParamS = "param (used in handler) $ "
+  showSegment RemainingPathS = "remaining path $ "
 
   showEndSegment :: EndSegment -> String
   showEndSegment (Just a, m) = "<handler> -- with method " ++ show m ++ " and arity " ++ show a
@@ -146,6 +148,7 @@ flatten = f where
   f (Param r) = map (first (first (ParamS:))) (f r)
   f (Handler e ca a) = [(([], e), (ca, a))]
   f (Choice rs) = concatMap f rs
+  f (RemainingPath method a) = [(([RemainingPathS], (Nothing, method)), (const True, a))]
 
 -- | Compile routes or return overlap report.  Returns 'Left e' in
 -- case of order-dependent overlap between handlers, where 'e'
@@ -168,13 +171,20 @@ dispatch t = do
 -- | Dispatch a request given a method and path.  Give priority to more specific paths.
 -- 'params' holds path segments that where matched 'ParamS' segment.
 dispatch' :: forall a. [String] -> Method -> [String] -> RouteTree (CheckApply, a) -> Maybe ([String], a)
-dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode
+dispatch' params m ps (R t) = dChildren ps `mplus` fmap (params ++ ps,) dNode `mplus` fmap (params ++ ps,) dRemainingPath
   where
   -- most specific: look up a segment in the children and recurse
   dChildren :: [String] -> Maybe ([String], a)
   dChildren (p:ps') = ((Map.lookup (StringS p) (Trie.children1 t)) >>= dispatch' params m ps' . R)
               `mplus` ((Map.lookup (ParamS) (Trie.children1 t)) >>= dispatch' (params ++ [p]) m ps' . R)
   dChildren []      = Nothing
+
+  dRemainingPath :: Maybe a
+  dRemainingPath = do
+    em <- Trie.lookup [RemainingPathS] t
+    (_,h)  <- Map.lookup (Nothing, m) em
+    return h
+
   dNode :: Maybe a
   dNode = do
     -- Find a handler that does not need any more segments
